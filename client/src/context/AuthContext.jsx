@@ -29,36 +29,64 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const detectAndSaveLocation = async () => {
-        if ('geolocation' in navigator) {
+        // Silently skip location detection - it's optional
+        if (!('geolocation' in navigator)) {
+            return;
+        }
+
+        try {
+            // Set a timeout for geolocation request
+            const position = await Promise.race([
+                new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        timeout: 5000,
+                        enableHighAccuracy: false
+                    });
+                }),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout')), 5000)
+                )
+            ]);
+
+            const { latitude, longitude } = position.coords;
+
+            // Try to get address from OpenStreetMap (with error handling)
             try {
-                const position = await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject);
-                });
-
-                const { latitude, longitude } = position.coords;
-
-                // Reverse geocoding to get address
                 const response = await fetch(
-                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+                    {
+                        headers: { 'User-Agent': 'Qusar-Ecommerce' },
+                        signal: AbortSignal.timeout(5000)
+                    }
                 );
+
+                if (!response.ok) {
+                    throw new Error('Geocoding failed');
+                }
+
                 const data = await response.json();
 
                 const locationData = {
-                    street: data.address.road || '',
-                    city: data.address.city || data.address.town || data.address.village || '',
-                    state: data.address.state || '',
-                    zipCode: data.address.postcode || '',
-                    country: data.address.country || 'India',
+                    street: data.address?.road || '',
+                    city: data.address?.city || data.address?.town || data.address?.village || '',
+                    state: data.address?.state || '',
+                    zipCode: data.address?.postcode || '',
+                    country: data.address?.country || 'India',
                     coordinates: { latitude, longitude }
                 };
 
-                // Save to backend
-                await api.post('/users/address', locationData);
-
-                console.log('Location saved:', locationData);
-            } catch (error) {
-                console.log('Location detection skipped:', error.message);
+                // Try to save to backend (silently fail if endpoint doesn't exist)
+                try {
+                    await api.post('/users/address', locationData);
+                } catch (err) {
+                    // Silently ignore if endpoint doesn't exist
+                }
+            } catch (geoError) {
+                // Silently ignore geocoding errors
             }
+        } catch (error) {
+            // Silently ignore all location detection errors
+            // This is optional functionality, no need to show errors
         }
     };
 
