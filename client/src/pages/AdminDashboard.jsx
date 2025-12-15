@@ -22,7 +22,16 @@ const AdminDashboard = () => {
             navigate('/');
             return;
         }
+
+        // Initial fetch
         fetchSellerRequests();
+
+        // Auto-refresh every 10 seconds to sync across multiple admins
+        const interval = setInterval(() => {
+            fetchSellerRequests();
+        }, 10000); // 10 seconds
+
+        return () => clearInterval(interval);
     }, [isAuthenticated, user, navigate]);
 
     const fetchSellerRequests = async () => {
