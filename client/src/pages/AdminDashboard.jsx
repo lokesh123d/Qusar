@@ -28,15 +28,17 @@ const AdminDashboard = () => {
 
         // Auto-refresh every 10 seconds to sync across multiple admins
         const interval = setInterval(() => {
-            fetchSellerRequests();
+            fetchSellerRequests(false); // Pass false to prevent showing loading state during auto-refresh
         }, 10000); // 10 seconds
 
         return () => clearInterval(interval);
     }, [isAuthenticated, user, navigate]);
 
-    const fetchSellerRequests = async () => {
+    const fetchSellerRequests = async (showLoading = true) => {
         try {
-            setLoading(true);
+            if (showLoading) {
+                setLoading(true);
+            }
             // Use the new endpoint that works with SellerRequest model
             const { data } = await api.get('/admin/seller-requests-new');
             console.log('Seller requests:', data.requests);
@@ -45,7 +47,9 @@ const AdminDashboard = () => {
             console.error('Error fetching seller requests:', error);
             setSellerRequests([]);
         } finally {
-            setLoading(false);
+            if (showLoading) {
+                setLoading(false);
+            }
         }
     };
 
