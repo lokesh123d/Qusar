@@ -7,7 +7,7 @@ const Footer = () => {
         <footer className="footer">
             <div className="footer-content container">
                 <div className="footer-section">
-                    <h3 className="footer-title">Qusar</h3>
+                    <img src="/images/qusar-logo.png" alt="Qusar" className="footer-logo" />
                     <p className="footer-text">
                         Your one-stop destination for all your shopping needs. Quality products, great prices, and excellent service.
                     </p>

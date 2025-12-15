@@ -70,8 +70,7 @@ const Navbar = () => {
             <div className="navbar-container container">
                 {/* Logo */}
                 <Link to="/" className="navbar-logo">
-                    <img src="/qusar-logo.png" alt="Qusar" className="logo-image" />
-                    <span className="logo-text">Qusar</span>
+                    <img src="/images/qusar-logo.png" alt="Qusar" className="logo-image" />
                 </Link>
 
                 {/* Search Bar */}

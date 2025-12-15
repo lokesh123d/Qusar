@@ -18,6 +18,14 @@
     gap: var(--spacing-md);
 }
 
+.footer-logo {
+    height: 60px;
+    width: auto;
+    object-fit: contain;
+    margin-bottom: var(--spacing-sm);
+    filter: brightness(0) saturate(100%);
+}
+
 .footer-title {
     display: flex;
     align-items: center;
