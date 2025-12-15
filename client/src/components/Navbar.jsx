@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FiShoppingCart, FiUser, FiSearch, FiMenu, FiX, FiHeart, FiPackage, FiLogOut } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import NotificationDropdown from './NotificationDropdown';
 import api from '../utils/api';
 import './Navbar.css';
 
@@ -127,20 +128,26 @@ const Navbar = () => {
                                 {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
                             </Link>
 
+                            {isAuthenticated && <NotificationDropdown />}
+
                             <div className="profile-dropdown">
                                 <button
                                     className="nav-link profile-btn"
                                     onClick={handleProfileToggle}
                                 >
-                                    {user?.avatar ? (
+                                    {user?.avatar && user.avatar !== 'https://via.placeholder.com/150' ? (
                                         <img
                                             src={user.avatar}
                                             alt={user.name}
                                             className="profile-avatar"
+                                            onError={(e) => {
+                                                console.log('Avatar load error:', user.avatar);
+                                                e.target.style.display = 'none';
+                                                e.target.nextSibling.style.display = 'inline';
+                                            }}
                                         />
-                                    ) : (
-                                        <FiUser />
-                                    )}
+                                    ) : null}
+                                    {(!user?.avatar || user.avatar === 'https://via.placeholder.com/150') && <FiUser />}
                                     <span>{user?.name}</span>
                                     {user?.role === 'superadmin' && (
                                         <span className="role-badge superadmin">Super Admin</span>

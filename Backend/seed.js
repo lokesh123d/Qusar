@@ -777,6 +777,13 @@ const seedDatabase = async () => {
             role: 'admin'
         });
 
+        const lokeshAdmin = await User.create({
+            name: 'Lokesh',
+            email: 'lokesh25@navgurukul.org',
+            password: 'lokesh123',
+            role: 'admin'
+        });
+
         const user = await User.create({
             name: 'John Doe',
             email: 'user@example.com',
@@ -785,6 +792,7 @@ const seedDatabase = async () => {
         });
 
         console.log('👤 Admin user created');
+        console.log('👤 Lokesh admin created');
         console.log('👤 Sample user created');
 
         // Insert products
@@ -794,6 +802,7 @@ const seedDatabase = async () => {
         console.log('\n✨ Database seeded successfully!');
         console.log('\n📝 Login Credentials:');
         console.log(`Admin - Email: admin@ecommerce.com, Password: admin123`);
+        console.log(`Lokesh Admin - Email: lokesh25@navgurukul.org, Password: lokesh123`);
         console.log(`User  - Email: user@example.com, Password: user123`);
         console.log(`\n📊 Total Products: ${products.length}`);
         console.log(`📂 Categories: Electronics, Fashion, Home & Kitchen, Books, Sports, Beauty`);

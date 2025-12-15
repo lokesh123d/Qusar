@@ -15,46 +15,15 @@ const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const sellerRoutes = require('./routes/seller');
+const paymentRoutes = require('./routes/payment');
+const { router: notificationRoutes } = require('./routes/notifications');
 
 const app = express();
 
 // Middleware
-// CORS Configuration
-const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'https://qusar.vercel.app'
-];
-
-// Add FRONTEND_URL from env if it exists
-if (process.env.FRONTEND_URL) {
-    allowedOrigins.push(process.env.FRONTEND_URL);
-}
-
-console.log('🔒 Allowed CORS Origins:', allowedOrigins);
-
 app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps, curl, or Postman)
-        if (!origin) {
-            console.log('✅ Request with no origin allowed');
-            return callback(null, true);
-        }
-
-        console.log('🌐 Request from origin:', origin);
-
-        if (allowedOrigins.includes(origin)) {
-            console.log('✅ Origin allowed:', origin);
-            return callback(null, true);
-        } else {
-            console.log('❌ Origin blocked:', origin);
-            const msg = `CORS policy does not allow access from origin: ${origin}`;
-            return callback(new Error(msg), false);
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -75,6 +44,9 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/seller', sellerRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/test', require('./routes/test'));
 
 // Health check route
 app.get('/api/health', (req, res) => {

@@ -12,10 +12,8 @@ const Footer = () => {
                         Your one-stop destination for all your shopping needs. Quality products, great prices, and excellent service.
                     </p>
                     <div className="social-links">
-                        <a href="#" className="social-link"><FiFacebook /></a>
-                        <a href="#" className="social-link"><FiTwitter /></a>
-                        <a href="#" className="social-link"><FiInstagram /></a>
-                        <a href="#" className="social-link"><FiLinkedin /></a>
+                        <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="social-link"><FiTwitter /></a>
+                        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="social-link"><FiInstagram /></a>
                     </div>
                 </div>
 
@@ -48,11 +46,11 @@ const Footer = () => {
                         </li>
                         <li>
                             <FiPhone />
-                            <span>+91 1800-123-4567</span>
+                            <span>+91 8091780737</span>
                         </li>
                         <li>
                             <FiMapPin />
-                            <span>Mumbai, India</span>
+                            <span>Nainital, Uttarakhand</span>
                         </li>
                     </ul>
                 </div>

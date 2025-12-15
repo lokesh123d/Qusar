@@ -203,14 +203,19 @@
     background: none;
     border: none;
     font-family: inherit;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
 }
 
 .profile-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #e0e0e0;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    border: 1.5px solid #d0d0d0 !important;
+    margin-right: 6px !important;
+    flex-shrink: 0 !important;
 }
 
 .dropdown-menu {

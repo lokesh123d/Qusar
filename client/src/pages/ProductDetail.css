@@ -357,7 +357,25 @@
 .wishlist-btn {
     padding: 1rem;
     font-size: 1.5rem;
+    transition: all 0.2s;
 }
+
+.wishlist-btn:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+.wishlist-btn.active {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
+.wishlist-btn .filled {
+    fill: currentColor;
+}
+
 
 /* Features */
 .product-features {

@@ -44,8 +44,15 @@ const orderSchema = new mongoose.Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['Pending', 'Paid', 'Failed'],
-        default: 'Pending'
+        enum: ['pending', 'paid', 'failed'],
+        default: 'pending'
+    },
+    paymentDetails: {
+        method: String,
+        razorpayOrderId: String,
+        razorpayPaymentId: String,
+        razorpaySignature: String,
+        paidAt: Date
     },
     expectedDeliveryDate: {
         type: Date
@@ -68,8 +75,35 @@ const orderSchema = new mongoose.Schema({
     },
     orderStatus: {
         type: String,
-        enum: ['Processing', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'],
-        default: 'Processing'
+        enum: ['Pending', 'Processing', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled', 'Rejected'],
+        default: 'Pending'
+    },
+    seller: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    sellerConfirmed: {
+        type: Boolean,
+        default: false
+    },
+    sellerConfirmedAt: Date,
+    rejectedBySeller: {
+        type: Boolean,
+        default: false
+    },
+    rejectionReason: String,
+    trackingInfo: {
+        sellerLocation: {
+            lat: Number,
+            lng: Number,
+            address: String
+        },
+        currentLocation: {
+            lat: Number,
+            lng: Number
+        },
+        estimatedDelivery: Date,
+        distance: Number
     },
     deliveredAt: Date,
     cancelledAt: Date

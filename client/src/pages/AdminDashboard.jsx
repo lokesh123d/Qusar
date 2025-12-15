@@ -5,6 +5,7 @@ import api from '../utils/api';
 import Toast from '../components/Toast';
 import SellerRequests from '../components/SellerRequests';
 import UserManagement from '../components/UserManagement';
+import PaymentSettings from '../components/PaymentSettings';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
@@ -213,6 +214,11 @@ const AdminDashboard = () => {
             {/* User Management */}
             <div className="dashboard-content">
                 <UserManagement />
+            </div>
+
+            {/* Payment Settings */}
+            <div className="dashboard-content">
+                <PaymentSettings />
             </div>
         </div>
     );

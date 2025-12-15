@@ -22,6 +22,7 @@ const ProductDetail = () => {
     const [selectedColor, setSelectedColor] = useState(null);
     const [selectedSize, setSelectedSize] = useState(null);
     const [activeTab, setActiveTab] = useState('details'); // details, reviews, discussion
+    const [isInWishlist, setIsInWishlist] = useState(false);
 
     // Review submission state
     const [showReviewForm, setShowReviewForm] = useState(false);
@@ -31,7 +32,8 @@ const ProductDetail = () => {
 
     useEffect(() => {
         fetchProductDetails();
-    }, [id]);
+        checkWishlistStatus();
+    }, [id, isAuthenticated]);
 
     const fetchProductDetails = async () => {
         try {
@@ -76,6 +78,52 @@ const ProductDetail = () => {
         } else {
             setToast({
                 message: result.message || 'Failed to add to cart',
+                type: 'error'
+            });
+        }
+    };
+
+    const checkWishlistStatus = async () => {
+        if (!isAuthenticated) return;
+
+        try {
+            const { data } = await api.get('/users/wishlist');
+            const inWishlist = data.wishlist?.some(item => item._id === id);
+            setIsInWishlist(inWishlist);
+        } catch (error) {
+            console.error('Error checking wishlist:', error);
+        }
+    };
+
+    const handleToggleWishlist = async () => {
+        if (!isAuthenticated) {
+            setToast({
+                message: 'Please login to add items to wishlist',
+                type: 'error'
+            });
+            setTimeout(() => navigate('/login'), 1500);
+            return;
+        }
+
+        try {
+            if (isInWishlist) {
+                await api.delete(`/users/wishlist/${product._id}`);
+                setIsInWishlist(false);
+                setToast({
+                    message: '✓ Removed from wishlist',
+                    type: 'success'
+                });
+            } else {
+                await api.post(`/users/wishlist/${product._id}`);
+                setIsInWishlist(true);
+                setToast({
+                    message: '✓ Added to wishlist',
+                    type: 'success'
+                });
+            }
+        } catch (error) {
+            setToast({
+                message: error.response?.data?.message || 'Failed to update wishlist',
                 type: 'error'
             });
         }
@@ -295,8 +343,12 @@ const ProductDetail = () => {
                                 <button className="btn btn-primary btn-lg add-to-cart" onClick={handleAddToCart}>
                                     <FiShoppingCart /> Add to Cart
                                 </button>
-                                <button className="btn btn-outline btn-icon wishlist-btn">
-                                    <FiHeart />
+                                <button
+                                    className={`btn btn-outline btn-icon wishlist-btn ${isInWishlist ? 'active' : ''}`}
+                                    onClick={handleToggleWishlist}
+                                    title={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                                >
+                                    <FiHeart className={isInWishlist ? 'filled' : ''} />
                                 </button>
                             </div>
                         )}

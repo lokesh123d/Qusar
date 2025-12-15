@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const { protect, admin } = require('../middleware/auth');
+const { createNotification } = require('./notifications');
 
 // @route   POST /api/orders
 // @desc    Create new order
@@ -39,7 +40,7 @@ router.post('/', protect, async (req, res) => {
         const taxPrice = Number((itemsPrice * 0.18).toFixed(2));
         const totalPrice = itemsPrice + shippingPrice + taxPrice;
 
-        // Create order items
+        // Create order items and get seller from first product
         const orderItems = cart.items.map(item => ({
             product: item.product._id,
             name: item.product.name,
@@ -47,6 +48,22 @@ router.post('/', protect, async (req, res) => {
             quantity: item.quantity,
             price: item.price
         }));
+
+        // Get seller from first product (assuming all products from same seller for now)
+        let seller = null;
+        try {
+            const firstProductId = cart.items[0].product._id || cart.items[0].product;
+            console.log('Fetching seller for product:', firstProductId);
+            const firstProduct = await Product.findById(firstProductId).populate('seller');
+            if (firstProduct && firstProduct.seller) {
+                seller = firstProduct.seller;
+                console.log('Seller found:', seller._id, seller.name);
+            } else {
+                console.log('Product has no seller assigned');
+            }
+        } catch (sellerError) {
+            console.error('Error fetching seller:', sellerError);
+        }
 
         // Create order
         const order = new Order({
@@ -58,10 +75,53 @@ router.post('/', protect, async (req, res) => {
             shippingPrice,
             taxPrice,
             totalPrice,
-            paymentStatus: paymentMethod === 'COD' ? 'Pending' : 'Paid'
+            seller: seller?._id,
+            orderStatus: 'Pending',
+            paymentStatus: paymentMethod === 'COD' ? 'pending' : 'pending',
+            trackingInfo: {
+                sellerLocation: {
+                    lat: 29.3803, // Nainital coordinates
+                    lng: 79.4636,
+                    address: 'Nainital, Uttarakhand'
+                }
+            }
         });
 
         await order.save();
+
+        // Send notification to seller or admin
+        try {
+            if (seller) {
+                console.log('Sending notification to seller:', seller._id);
+                await createNotification(
+                    seller._id,
+                    'order_placed',
+                    'New Order Received!',
+                    `You have received a new order #${order.orderNumber} worth ₹${totalPrice.toFixed(2)}`,
+                    order._id
+                );
+                console.log('Notification sent successfully to seller');
+            } else {
+                console.log('No seller found for product, finding admin...');
+                // If no seller, send to admin
+                const User = require('../models/User');
+                const admin = await User.findOne({ role: 'admin' });
+                if (admin) {
+                    console.log('Sending notification to admin:', admin._id);
+                    await createNotification(
+                        admin._id,
+                        'order_placed',
+                        'New Order Received!',
+                        `New order #${order.orderNumber} worth ₹${totalPrice.toFixed(2)} (No seller assigned)`,
+                        order._id
+                    );
+                    console.log('Notification sent to admin');
+                }
+            }
+        } catch (notifError) {
+            console.error('Error sending notification:', notifError);
+            // Don't fail the order if notification fails
+        }
 
         // Update product stock
         for (const item of cart.items) {
@@ -70,8 +130,10 @@ router.post('/', protect, async (req, res) => {
             });
         }
 
-        // Clear cart
-        await Cart.findOneAndDelete({ user: req.user._id });
+        // Clear cart only for COD
+        if (paymentMethod === 'COD') {
+            await Cart.findOneAndDelete({ user: req.user._id });
+        }
 
         res.status(201).json({
             success: true,
@@ -189,6 +251,17 @@ router.put('/:id/cancel', protect, async (req, res) => {
 
         await order.save();
 
+        // Notify seller if order was assigned to one
+        if (order.seller) {
+            await createNotification(
+                order.seller,
+                'order_cancelled',
+                'Order Cancelled',
+                `Order #${order.orderNumber} has been cancelled by the customer.`,
+                order._id
+            );
+        }
+
         res.json({
             success: true,
             message: 'Order cancelled successfully',
@@ -244,7 +317,7 @@ router.put('/:id/status', protect, admin, async (req, res) => {
         order.orderStatus = orderStatus;
         if (orderStatus === 'Delivered') {
             order.deliveredAt = Date.now();
-            order.paymentStatus = 'Paid';
+            order.paymentStatus = 'paid';
         }
 
         await order.save();
@@ -258,6 +331,128 @@ router.put('/:id/status', protect, admin, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error updating order status',
+            error: error.message
+        });
+    }
+});
+
+// @route   PUT /api/orders/:id/confirm
+// @desc    Seller confirms order
+// @access  Private (Seller only)
+router.put('/:id/confirm', protect, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id).populate('user');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+
+        // Check if user is the seller
+        if (order.seller.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to confirm this order'
+            });
+        }
+
+        if (order.sellerConfirmed) {
+            return res.status(400).json({
+                success: false,
+                message: 'Order already confirmed'
+            });
+        }
+
+        order.sellerConfirmed = true;
+        order.sellerConfirmedAt = Date.now();
+        order.orderStatus = 'Processing';
+        await order.save();
+
+        // Notify user
+        await createNotification(
+            order.user._id,
+            'order_confirmed',
+            'Order Confirmed!',
+            `Your order #${order.orderNumber} has been confirmed by the seller and is being processed.`,
+            order._id
+        );
+
+        res.json({
+            success: true,
+            message: 'Order confirmed successfully',
+            order
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error confirming order',
+            error: error.message
+        });
+    }
+});
+
+// @route   PUT /api/orders/:id/reject
+// @desc    Seller rejects order
+// @access  Private (Seller only)
+router.put('/:id/reject', protect, async (req, res) => {
+    try {
+        const { reason } = req.body;
+        const order = await Order.findById(req.params.id).populate('user');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+
+        // Check if user is the seller
+        if (order.seller.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to reject this order'
+            });
+        }
+
+        if (order.sellerConfirmed) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot reject confirmed order'
+            });
+        }
+
+        order.rejectedBySeller = true;
+        order.rejectionReason = reason || 'No reason provided';
+        order.orderStatus = 'Rejected';
+        await order.save();
+
+        // Restore product stock
+        for (const item of order.items) {
+            await Product.findByIdAndUpdate(item.product, {
+                $inc: { stock: item.quantity }
+            });
+        }
+
+        // Notify user
+        await createNotification(
+            order.user._id,
+            'order_rejected',
+            'Order Rejected',
+            `Your order #${order.orderNumber} has been rejected by the seller. Reason: ${order.rejectionReason}`,
+            order._id
+        );
+
+        res.json({
+            success: true,
+            message: 'Order rejected',
+            order
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error rejecting order',
             error: error.message
         });
     }

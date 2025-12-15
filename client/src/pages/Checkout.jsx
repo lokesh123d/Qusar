@@ -6,6 +6,17 @@ import Toast from '../components/Toast';
 import api from '../utils/api';
 import './Checkout.css';
 
+// Load Razorpay script
+const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+};
+
 const Checkout = () => {
     const navigate = useNavigate();
     const { cart, clearCart } = useCart();
@@ -14,6 +25,7 @@ const Checkout = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [toast, setToast] = useState(null);
+    const [paymentSettings, setPaymentSettings] = useState(null);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -35,35 +47,47 @@ const Checkout = () => {
             return;
         }
 
+        // Fetch payment settings
+        fetchPaymentSettings();
+
         // Fetch user's saved location and auto-fill form
-        const fetchUserLocation = async () => {
-            try {
-                const response = await api.get('/users/profile');
-                const userProfile = response.data.user;
-
-                if (userProfile.addresses && userProfile.addresses.length > 0) {
-                    const savedAddress = userProfile.addresses[0];
-                    setFormData(prev => ({
-                        ...prev,
-                        fullName: userProfile.name || prev.fullName,
-                        address: savedAddress.street || prev.address,
-                        city: savedAddress.city || prev.city,
-                        state: savedAddress.state || prev.state,
-                        pincode: savedAddress.zipCode || prev.pincode
-                    }));
-
-                    setToast({
-                        message: 'Address auto-filled from your location!',
-                        type: 'info'
-                    });
-                }
-            } catch (err) {
-                console.log('Could not fetch location:', err.message);
-            }
-        };
-
         fetchUserLocation();
     }, [isAuthenticated, cart.items, navigate]);
+
+    const fetchPaymentSettings = async () => {
+        try {
+            const { data } = await api.get('/payment/settings');
+            setPaymentSettings(data.settings);
+        } catch (error) {
+            console.error('Failed to fetch payment settings:', error);
+        }
+    };
+
+    const fetchUserLocation = async () => {
+        try {
+            const response = await api.get('/users/profile');
+            const userProfile = response.data.user;
+
+            if (userProfile.addresses && userProfile.addresses.length > 0) {
+                const savedAddress = userProfile.addresses[0];
+                setFormData(prev => ({
+                    ...prev,
+                    fullName: userProfile.name || prev.fullName,
+                    address: savedAddress.street || prev.address,
+                    city: savedAddress.city || prev.city,
+                    state: savedAddress.state || prev.state,
+                    pincode: savedAddress.zipCode || prev.pincode
+                }));
+
+                setToast({
+                    message: 'Address auto-filled from your location!',
+                    type: 'info'
+                });
+            }
+        } catch (err) {
+            console.log('Could not fetch location:', err.message);
+        }
+    };
 
     const handleChange = (e) => {
         setFormData({
@@ -81,6 +105,73 @@ const Checkout = () => {
         if (!formData.state.trim()) return 'State is required';
         if (!formData.pincode.trim() || !/^\d{6}$/.test(formData.pincode)) return 'Valid 6-digit pincode is required';
         return null;
+    };
+
+    const handleRazorpayPayment = async (orderData) => {
+        try {
+            // Load Razorpay script
+            const scriptLoaded = await loadRazorpayScript();
+            if (!scriptLoaded) {
+                throw new Error('Failed to load Razorpay SDK');
+            }
+
+            // Create Razorpay order
+            const { data } = await api.post('/payment/create-order', {
+                amount: orderData.totalPrice,
+                orderId: orderData._id
+            });
+
+            const options = {
+                key: data.keyId,
+                amount: data.order.amount,
+                currency: data.order.currency,
+                name: 'Qusar',
+                description: 'Order Payment',
+                order_id: data.order.id,
+                handler: async function (response) {
+                    try {
+                        // Verify payment
+                        const verifyResponse = await api.post('/payment/verify-payment', {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            orderId: orderData._id
+                        });
+
+                        if (verifyResponse.data.success) {
+                            setSuccess(true);
+                            // Cart already cleared by backend after payment verification
+                            setTimeout(() => {
+                                navigate(`/orders/${orderData._id}`);
+                            }, 2000);
+                        }
+                    } catch (error) {
+                        setError('Payment verification failed. Please contact support.');
+                        setLoading(false);
+                    }
+                },
+                prefill: {
+                    name: formData.fullName,
+                    contact: formData.phone
+                },
+                theme: {
+                    color: '#6366f1'
+                },
+                modal: {
+                    ondismiss: function () {
+                        setLoading(false);
+                        setError('Payment cancelled');
+                    }
+                }
+            };
+
+            const razorpay = new window.Razorpay(options);
+            razorpay.open();
+        } catch (error) {
+            console.error('Razorpay error:', error);
+            setError(error.message || 'Payment failed. Please try again.');
+            setLoading(false);
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -111,15 +202,21 @@ const Checkout = () => {
             });
 
             if (response.data.success) {
-                setSuccess(true);
-                await clearCart();
-                setTimeout(() => {
-                    navigate(`/orders/${response.data.order._id}`);
-                }, 2000);
+                const orderData = response.data.order;
+
+                // If payment method is online (Card/UPI), initiate Razorpay
+                if (formData.paymentMethod !== 'COD') {
+                    await handleRazorpayPayment(orderData);
+                } else {
+                    // For COD, directly show success (cart already cleared by backend)
+                    setSuccess(true);
+                    setTimeout(() => {
+                        navigate(`/orders/${orderData._id}`);
+                    }, 2000);
+                }
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to place order. Please try again.');
-        } finally {
             setLoading(false);
         }
     };
@@ -129,15 +226,25 @@ const Checkout = () => {
     };
 
     const subtotal = calculateSubtotal();
-    const shipping = subtotal > 500 ? 0 : 40;
-    const tax = subtotal * 0.18;
+    const shipping = paymentSettings?.freeShippingAbove && subtotal > paymentSettings.freeShippingAbove
+        ? 0
+        : (paymentSettings?.shippingCharges || 40);
+    const taxRate = (paymentSettings?.taxPercentage || 0) / 100;
+    const tax = subtotal * taxRate;
     const total = subtotal + shipping + tax;
+
+    // Check if payment method is available
+    const isCODAvailable = paymentSettings?.codEnabled &&
+        total >= (paymentSettings?.codMinAmount || 0) &&
+        total <= (paymentSettings?.codMaxAmount || 999999);
+
+    const isOnlinePaymentAvailable = paymentSettings?.razorpayEnabled;
 
     if (success) {
         return (
             <div className="container checkout-success">
                 <div className="success-card">
-                    <div className="success-icon"></div>
+                    <div className="success-icon">✓</div>
                     <h2>Order Placed Successfully!</h2>
                     <p>Thank you for your order. You will be redirected to order details...</p>
                     <div className="spinner"></div>
@@ -243,62 +350,80 @@ const Checkout = () => {
                             <h3>Payment Method</h3>
 
                             <div className="payment-options">
-                                <label className="payment-option">
-                                    <input
-                                        type="radio"
-                                        name="paymentMethod"
-                                        value="COD"
-                                        checked={formData.paymentMethod === 'COD'}
-                                        onChange={handleChange}
-                                    />
-                                    <div className="payment-option-content">
-                                        <span className="payment-icon">COD</span>
-                                        <div>
-                                            <strong>Cash on Delivery</strong>
-                                            <p>Pay when you receive</p>
+                                {isCODAvailable && (
+                                    <label className="payment-option">
+                                        <input
+                                            type="radio"
+                                            name="paymentMethod"
+                                            value="COD"
+                                            checked={formData.paymentMethod === 'COD'}
+                                            onChange={handleChange}
+                                        />
+                                        <div className="payment-option-content">
+                                            <span className="payment-icon">💵</span>
+                                            <div>
+                                                <strong>Cash on Delivery</strong>
+                                                <p>Pay when you receive</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                </label>
+                                    </label>
+                                )}
 
-                                <label className="payment-option">
-                                    <input
-                                        type="radio"
-                                        name="paymentMethod"
-                                        value="Card"
-                                        checked={formData.paymentMethod === 'Card'}
-                                        onChange={handleChange}
-                                    />
-                                    <div className="payment-option-content">
-                                        <span className="payment-icon">Card</span>
-                                        <div>
-                                            <strong>Credit/Debit Card</strong>
-                                            <p>Secure payment</p>
-                                        </div>
-                                    </div>
-                                </label>
+                                {isOnlinePaymentAvailable && (
+                                    <>
+                                        <label className="payment-option">
+                                            <input
+                                                type="radio"
+                                                name="paymentMethod"
+                                                value="Card"
+                                                checked={formData.paymentMethod === 'Card'}
+                                                onChange={handleChange}
+                                            />
+                                            <div className="payment-option-content">
+                                                <span className="payment-icon">💳</span>
+                                                <div>
+                                                    <strong>Credit/Debit Card</strong>
+                                                    <p>Secure payment via Razorpay</p>
+                                                </div>
+                                            </div>
+                                        </label>
 
-                                <label className="payment-option">
-                                    <input
-                                        type="radio"
-                                        name="paymentMethod"
-                                        value="UPI"
-                                        checked={formData.paymentMethod === 'UPI'}
-                                        onChange={handleChange}
-                                    />
-                                    <div className="payment-option-content">
-                                        <span className="payment-icon">UPI</span>
-                                        <div>
-                                            <strong>UPI Payment</strong>
-                                            <p>Pay via UPI apps</p>
-                                        </div>
+                                        <label className="payment-option">
+                                            <input
+                                                type="radio"
+                                                name="paymentMethod"
+                                                value="UPI"
+                                                checked={formData.paymentMethod === 'UPI'}
+                                                onChange={handleChange}
+                                            />
+                                            <div className="payment-option-content">
+                                                <span className="payment-icon">📱</span>
+                                                <div>
+                                                    <strong>UPI Payment</strong>
+                                                    <p>Pay via UPI apps</p>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </>
+                                )}
+
+                                {!isCODAvailable && !isOnlinePaymentAvailable && (
+                                    <div className="no-payment-methods">
+                                        <p>⚠️ No payment methods available. Please contact support.</p>
                                     </div>
-                                </label>
+                                )}
                             </div>
+
+                            {!isCODAvailable && formData.paymentMethod === 'COD' && (
+                                <div className="payment-warning">
+                                    ⚠️ COD not available for this order amount
+                                </div>
+                            )}
                         </div>
 
                         {error && (
                             <div className="error-message">
-                                Warning: {error}
+                                ⚠️ {error}
                             </div>
                         )}
 
@@ -313,9 +438,10 @@ const Checkout = () => {
                         <button
                             type="submit"
                             className="btn btn-primary btn-place-order"
-                            disabled={loading}
+                            disabled={loading || (!isCODAvailable && !isOnlinePaymentAvailable)}
                         >
-                            {loading ? 'Placing Order...' : 'Place Order'}
+                            {loading ? 'Processing...' :
+                                formData.paymentMethod === 'COD' ? 'Place Order' : 'Proceed to Payment'}
                         </button>
                     </form>
                 </div>
@@ -347,10 +473,12 @@ const Checkout = () => {
                             <span>Shipping</span>
                             <span>{shipping === 0 ? 'FREE' : `₹${shipping.toFixed(2)}`}</span>
                         </div>
-                        <div className="summary-row">
-                            <span>Tax (18%)</span>
-                            <span>₹{tax.toFixed(2)}</span>
-                        </div>
+                        {taxRate > 0 && (
+                            <div className="summary-row">
+                                <span>Tax ({(taxRate * 100).toFixed(0)}%)</span>
+                                <span>₹{tax.toFixed(2)}</span>
+                            </div>
+                        )}
 
                         <div className="summary-divider"></div>
 

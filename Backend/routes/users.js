@@ -124,6 +124,56 @@ router.post('/upload-avatar', protect, upload.single('avatar'), async (req, res)
     }
 });
 
+// @route   PUT /api/users/password
+// @desc    Update password
+// @access  Private
+router.put('/password', protect, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide current and new password'
+            });
+        }
+
+        const user = await User.findById(req.user._id);
+
+        // Check if user has password (not Google-only account)
+        if (!user.password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot change password for Google-authenticated accounts'
+            });
+        }
+
+        // Verify current password
+        const isMatch = await user.comparePassword(currentPassword);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                message: 'Current password is incorrect'
+            });
+        }
+
+        // Update password
+        user.password = newPassword;
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Password updated successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error updating password',
+            error: error.message
+        });
+    }
+});
+
 // @route   POST /api/users/address
 // @desc    Add address
 // @access  Private

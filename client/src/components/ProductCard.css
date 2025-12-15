@@ -3,7 +3,7 @@
     border-radius: var(--radius-xl);
     overflow: hidden;
     box-shadow: var(--shadow-md);
-    transition: all var(--transition-base);
+    transition: box-shadow 0.2s;
     text-decoration: none;
     display: flex;
     flex-direction: column;
@@ -11,8 +11,7 @@
 }
 
 .product-card:hover {
-    transform: translateY(-8px);
-    box-shadow: var(--shadow-xl);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .product-image-wrapper {
@@ -27,11 +26,6 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform var(--transition-slow);
-}
-
-.product-card:hover .product-image {
-    transform: scale(1.1);
 }
 
 .discount-badge {

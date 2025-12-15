@@ -7,6 +7,7 @@ import { CartProvider } from './context/CartContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import PrivateRoute from './components/PrivateRoute';
+import ScrollToTop from './components/ScrollToTop';
 
 // Pages
 import Home from './pages/Home';
@@ -17,6 +18,7 @@ import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import Profile from './pages/Profile';
+import Wishlist from './pages/Wishlist';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import BecomeSeller from './pages/BecomeSeller';
@@ -34,6 +36,7 @@ function App() {
       <AuthProvider>
         <CartProvider>
           <Router>
+            <ScrollToTop />
             <div className="app">
               <Navbar />
               <main className="main-content">
@@ -71,6 +74,11 @@ function App() {
                   <Route path="/profile" element={
                     <PrivateRoute>
                       <Profile />
+                    </PrivateRoute>
+                  } />
+                  <Route path="/wishlist" element={
+                    <PrivateRoute>
+                      <Wishlist />
                     </PrivateRoute>
                   } />
 

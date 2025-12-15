@@ -1,511 +1,544 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FiUser, FiPackage, FiHeart, FiCreditCard, FiSettings, FiLogOut, FiEdit2, FiMapPin, FiLock, FiBell, FiDollarSign, FiShoppingBag, FiAward, FiX, FiCamera } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
+import Toast from '../components/Toast';
 import api from '../utils/api';
 import './Profile.css';
 
 const Profile = () => {
     const navigate = useNavigate();
-    const { isAuthenticated, user: authUser } = useAuth();
-    const [activeTab, setActiveTab] = useState('profile');
+    const { user, isAuthenticated, logout, refreshUser } = useAuth();
+    const [activeTab, setActiveTab] = useState('overview');
+    const [toast, setToast] = useState(null);
+    const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState({ type: '', text: '' });
+    const [stats, setStats] = useState({
+        totalOrders: 0,
+        totalSpent: 0,
+        activeOrders: 0,
+        rewardsPoints: 0
+    });
 
-    // Profile state
-    const [profileData, setProfileData] = useState({
+    // Edit modals state
+    const [editModal, setEditModal] = useState(null);
+    const [formData, setFormData] = useState({
         name: '',
         email: '',
         phone: '',
-        avatar: ''
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
     });
 
-    // Address state
-    const [addresses, setAddresses] = useState([]);
-    const [showAddressForm, setShowAddressForm] = useState(false);
-    const [editingAddress, setEditingAddress] = useState(null);
-    const [addressForm, setAddressForm] = useState({
-        fullName: '',
-        phone: '',
-        address: '',
-        city: '',
-        state: '',
-        pincode: '',
-        isDefault: false
-    });
-
-    // Wishlist state
-    const [wishlist, setWishlist] = useState([]);
+    const showToast = (message, type) => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
 
     useEffect(() => {
         if (!isAuthenticated) {
             navigate('/login');
             return;
         }
-        fetchUserData();
-    }, [isAuthenticated, navigate]);
-
-    const fetchUserData = async () => {
-        try {
-            setLoading(true);
-            const { data } = await api.get('/users/profile');
-            const userData = data.user;
-
-            setProfileData({
-                name: userData.name || '',
-                email: userData.email || '',
-                phone: userData.phone || '',
-                avatar: userData.avatar || '' // Add avatar to profileData
+        fetchOrders();
+        if (user) {
+            setFormData({
+                name: user.name || '',
+                email: user.email || '',
+                phone: user.phone || '',
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
             });
-            setAddresses(userData.addresses || []);
+        }
+    }, [isAuthenticated, navigate, user]);
 
-            // Fetch wishlist
-            const wishlistRes = await api.get('/users/wishlist');
-            setWishlist(wishlistRes.data.wishlist || []);
-        } catch (err) {
-            console.error('Error fetching user data:', err);
-        } finally {
-            setLoading(false);
+    const fetchOrders = async () => {
+        try {
+            const { data } = await api.get('/orders');
+            setOrders(data.orders || []);
+
+            // Calculate real stats
+            const totalOrders = data.orders.length;
+            const totalSpent = data.orders.reduce((sum, order) => sum + order.totalPrice, 0);
+            const activeOrders = data.orders.filter(o =>
+                o.orderStatus !== 'Delivered' && o.orderStatus !== 'Cancelled'
+            ).length;
+
+            setStats({
+                totalOrders,
+                totalSpent,
+                activeOrders,
+                rewardsPoints: Math.floor(totalSpent / 100)
+            });
+        } catch (error) {
+            console.error('Error fetching orders:', error);
         }
     };
 
-    const handleProfileUpdate = async (e) => {
-        e.preventDefault();
-        try {
-            setLoading(true);
-            const { data } = await api.put('/users/profile', profileData);
-            setMessage({ type: 'success', text: 'Profile updated successfully!' });
-            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-        } catch (err) {
-            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to update profile' });
-        } finally {
-            setLoading(false);
-        }
+    const handleInputChange = (e) => {
+        setFormData({
+            ...formData,
+            [e.target.name]: e.target.value
+        });
     };
 
-    const handleAddressSubmit = async (e) => {
-        e.preventDefault();
+    const handleUpdateProfile = async () => {
         try {
             setLoading(true);
-            if (editingAddress) {
-                await api.put(`/users/address/${editingAddress}`, addressForm);
-                setMessage({ type: 'success', text: 'Address updated successfully!' });
-            } else {
-                await api.post('/users/address', addressForm);
-                setMessage({ type: 'success', text: 'Address added successfully!' });
+            const { data } = await api.put('/users/profile', {
+                name: formData.name,
+                phone: formData.phone
+            });
+
+            if (data.success) {
+                await refreshUser();
+                showToast('✓ Profile updated successfully!', 'success');
+                setEditModal(null);
             }
-
-            fetchUserData();
-            setShowAddressForm(false);
-            setEditingAddress(null);
-            resetAddressForm();
-            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-        } catch (err) {
-            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to save address' });
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update profile', 'error');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDeleteAddress = async (addressId) => {
-        if (!window.confirm('Are you sure you want to delete this address?')) return;
-
-        try {
-            await api.delete(`/users/address/${addressId}`);
-            setMessage({ type: 'success', text: 'Address deleted successfully!' });
-            fetchUserData();
-            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-        } catch (err) {
-            setMessage({ type: 'error', text: 'Failed to delete address' });
-        }
-    };
-
-    const handleEditAddress = (address) => {
-        setEditingAddress(address._id);
-        setAddressForm({
-            fullName: address.fullName,
-            phone: address.phone,
-            address: address.address,
-            city: address.city,
-            state: address.state,
-            pincode: address.pincode,
-            isDefault: address.isDefault
-        });
-        setShowAddressForm(true);
-    };
-
-    const resetAddressForm = () => {
-        setAddressForm({
-            fullName: '',
-            phone: '',
-            address: '',
-            city: '',
-            state: '',
-            pincode: '',
-            isDefault: false
-        });
-    };
-
-    const handleRemoveFromWishlist = async (productId) => {
-        try {
-            await api.delete(`/users/wishlist/${productId}`);
-            setWishlist(wishlist.filter(item => item._id !== productId));
-            setMessage({ type: 'success', text: 'Removed from wishlist!' });
-            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-        } catch (err) {
-            setMessage({ type: 'error', text: 'Failed to remove from wishlist' });
-        }
-    };
-
-    const handleAvatarChange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Check file size (max 2MB)
-        if (file.size > 2 * 1024 * 1024) {
-            setMessage({ type: 'error', text: 'Image size should be less than 2MB' });
+    const handleUpdatePassword = async () => {
+        if (formData.newPassword !== formData.confirmPassword) {
+            showToast('Passwords do not match', 'error');
             return;
         }
 
-        const formData = new FormData();
-        formData.append('avatar', file);
+        if (formData.newPassword.length < 6) {
+            showToast('Password must be at least 6 characters', 'error');
+            return;
+        }
 
         try {
             setLoading(true);
-            const { data } = await api.post('/users/upload-avatar', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
+            const { data } = await api.put('/users/password', {
+                currentPassword: formData.currentPassword,
+                newPassword: formData.newPassword
             });
 
-            setMessage({ type: 'success', text: 'Profile picture updated!' });
-
-            // Refresh user data to get new avatar
-            await fetchUserData();
-
-            setTimeout(() => {
-                setMessage({ type: '', text: '' });
-            }, 3000);
-        } catch (err) {
-            setMessage({ type: 'error', text: 'Failed to upload image' });
+            if (data.success) {
+                showToast('✓ Password updated successfully!', 'success');
+                setEditModal(null);
+                setFormData({
+                    ...formData,
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                });
+            }
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update password', 'error');
         } finally {
             setLoading(false);
         }
     };
 
-    if (loading && !profileData.email) {
+    const handleLogout = () => {
+        logout();
+        navigate('/');
+    };
+
+    const formatDate = (dateString) => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    };
+
+    const getStatusIcon = (status) => {
+        if (status === 'Delivered') return '✓';
+        if (status === 'Cancelled') return '✗';
+        if (status === 'Shipped') return '🚚';
+        return '⏱';
+    };
+
+    const getLastMonthOrders = () => {
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        return orders.filter(o => new Date(o.createdAt) >= lastMonth).length;
+    };
+
+    const getLastMonthSpent = () => {
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        return orders
+            .filter(o => new Date(o.createdAt) >= lastMonth)
+            .reduce((sum, order) => sum + order.totalPrice, 0);
+    };
+
+    const calculateGrowth = (current, previous) => {
+        if (previous === 0) return 0;
+        return Math.round(((current - previous) / previous) * 100);
+    };
+
+    const renderOverview = () => {
+        const lastMonthOrders = getLastMonthOrders();
+        const lastMonthSpent = getLastMonthSpent();
+        const ordersGrowth = calculateGrowth(stats.totalOrders, stats.totalOrders - lastMonthOrders);
+        const spentGrowth = calculateGrowth(stats.totalSpent, stats.totalSpent - lastMonthSpent);
+
         return (
-            <div className="loading-container">
-                <div className="spinner"></div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="container profile-page">
-            <h1 className="page-title">My Profile</h1>
-
-            {message.text && (
-                <div className={`message-banner ${message.type}`}>
-                    {message.type === 'success' ? '' : 'Warning:'} {message.text}
-                </div>
-            )}
-
-            <div className="profile-layout">
-                {/* Sidebar */}
-                <div className="profile-sidebar">
-                    <div className="profile-avatar">
-                        <div className="avatar-image-container">
-                            <img
-                                src={profileData.avatar || authUser?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData.name || 'User')}&background=6366f1&color=fff&size=150`}
-                                alt="Profile"
-                                className="avatar-img"
-                            />
-                            <label htmlFor="avatar-upload" className="avatar-upload-btn" title="Change profile picture">
-                                <input
-                                    type="file"
-                                    id="avatar-upload"
-                                    accept="image/*"
-                                    style={{ display: 'none' }}
-                                    onChange={handleAvatarChange}
-                                />
-                                Change Photo
-                            </label>
+            <div className="profile-overview">
+                {/* Stats Cards */}
+                <div className="stats-grid">
+                    <div className="stat-card">
+                        <div className="stat-icon">
+                            <FiShoppingBag />
                         </div>
-                        <h3>{profileData.name || 'User'}</h3>
-                        <p>{profileData.email}</p>
+                        <div className="stat-content">
+                            <div className="stat-value">{stats.totalOrders}</div>
+                            <div className="stat-label">Total Orders</div>
+                            <div className="stat-change">
+                                {ordersGrowth > 0 ? '+' : ''}{ordersGrowth}% from last month
+                            </div>
+                        </div>
                     </div>
 
-                    <nav className="profile-nav">
+                    <div className="stat-card">
+                        <div className="stat-icon">
+                            <FiDollarSign />
+                        </div>
+                        <div className="stat-content">
+                            <div className="stat-value">₹{stats.totalSpent.toLocaleString()}</div>
+                            <div className="stat-label">Total Spent</div>
+                            <div className="stat-change">
+                                {spentGrowth > 0 ? '+' : ''}{spentGrowth}% from last month
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="stat-card">
+                        <div className="stat-icon">
+                            <FiPackage />
+                        </div>
+                        <div className="stat-content">
+                            <div className="stat-value">{stats.activeOrders}</div>
+                            <div className="stat-label">Active Orders</div>
+                            <div className="stat-change">In transit</div>
+                        </div>
+                    </div>
+
+                    <div className="stat-card">
+                        <div className="stat-icon">
+                            <FiAward />
+                        </div>
+                        <div className="stat-content">
+                            <div className="stat-value">{stats.rewardsPoints.toLocaleString()}</div>
+                            <div className="stat-label">Rewards Points</div>
+                            <div className="stat-change">
+                                {Math.max(0, 250 - (stats.rewardsPoints % 250))} points to next tier
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Recent Orders */}
+                <div className="recent-orders-section">
+                    <div className="section-header">
+                        <h3>Recent Orders</h3>
+                        <button className="view-all-btn" onClick={() => setActiveTab('orders')}>
+                            View All →
+                        </button>
+                    </div>
+
+                    <div className="orders-list">
+                        {orders.length === 0 ? (
+                            <p className="empty-message">No orders yet</p>
+                        ) : (
+                            orders.slice(0, 3).map((order) => (
+                                <div key={order._id} className="order-item">
+                                    <div className="order-icon">
+                                        <FiPackage />
+                                    </div>
+                                    <div className="order-details">
+                                        <div className="order-id">#{order._id.slice(-8).toUpperCase()}</div>
+                                        <div className="order-date">{formatDate(order.createdAt)}</div>
+                                        <div className="order-products">
+                                            {order.items.slice(0, 2).map(item => item.name).join(', ')}
+                                            {order.items.length > 2 && ` +${order.items.length - 2} more`}
+                                        </div>
+                                        <div className={`order-status status-${order.orderStatus.toLowerCase()}`}>
+                                            {getStatusIcon(order.orderStatus)} {order.orderStatus}
+                                        </div>
+                                    </div>
+                                    <div className="order-price">
+                                        ₹{order.totalPrice.toFixed(2)}
+                                    </div>
+                                    <button className="track-btn" onClick={() => navigate(`/orders/${order._id}`)}>
+                                        Track Order
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderOrders = () => (
+        <div className="orders-section">
+            <h2>My Orders</h2>
+            <div className="orders-list">
+                {orders.length === 0 ? (
+                    <p className="empty-message">No orders yet. Start shopping!</p>
+                ) : (
+                    orders.map((order) => (
+                        <div key={order._id} className="order-item">
+                            <div className="order-icon">
+                                <FiPackage />
+                            </div>
+                            <div className="order-details">
+                                <div className="order-id">#{order._id.slice(-8).toUpperCase()}</div>
+                                <div className="order-date">{formatDate(order.createdAt)}</div>
+                                <div className="order-products">
+                                    {order.items.map(item => item.name).join(', ')}
+                                </div>
+                                <div className={`order-status status-${order.orderStatus.toLowerCase()}`}>
+                                    {getStatusIcon(order.orderStatus)} {order.orderStatus}
+                                </div>
+                            </div>
+                            <div className="order-price">
+                                ₹{order.totalPrice.toFixed(2)}
+                            </div>
+                            <button className="track-btn" onClick={() => navigate(`/orders/${order._id}`)}>
+                                Track Order
+                            </button>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+
+    const renderSettings = () => (
+        <div className="settings-section">
+            <h2>Account Settings</h2>
+
+            {/* Personal Information */}
+            <div className="settings-card">
+                <div className="card-header">
+                    <FiUser />
+                    <h3>Personal Information</h3>
+                </div>
+                <div className="settings-row">
+                    <span className="label">Full Name</span>
+                    <span className="value">{user?.name}</span>
+                    <button className="edit-btn" onClick={() => setEditModal('name')}>Edit</button>
+                </div>
+                <div className="settings-row">
+                    <span className="label">Email Address</span>
+                    <span className="value">{user?.email}</span>
+                    <button className="edit-btn" disabled style={{ opacity: 0.5 }}>Verified</button>
+                </div>
+                <div className="settings-row">
+                    <span className="label">Phone Number</span>
+                    <span className="value">{user?.phone || 'Not set'}</span>
+                    <button className="edit-btn" onClick={() => setEditModal('phone')}>Edit</button>
+                </div>
+            </div>
+
+            {/* Security */}
+            <div className="settings-card">
+                <div className="card-header">
+                    <FiLock />
+                    <h3>Security</h3>
+                </div>
+                <div className="settings-row">
+                    <span className="label">Password</span>
+                    <span className="value">••••••••</span>
+                    <button className="edit-btn" onClick={() => setEditModal('password')}>Change</button>
+                </div>
+                {user?.googleId && (
+                    <div className="settings-row">
+                        <span className="label">Google Account</span>
+                        <span className="value enabled">Connected</span>
+                        <button className="edit-btn" disabled style={{ opacity: 0.5 }}>Active</button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="profile-page">
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+            <div className="profile-container">
+                {/* Sidebar */}
+                <aside className="profile-sidebar">
+                    <div className="sidebar-header">Dashboard</div>
+
+                    <nav className="sidebar-nav">
                         <button
-                            className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('profile')}
+                            className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('overview')}
                         >
-                            👤 Personal Information
+                            <FiUser /> Overview
                         </button>
                         <button
-                            className={`nav-item ${activeTab === 'addresses' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('addresses')}
+                            className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('orders')}
                         >
-                            Addresses
+                            <FiPackage /> My Orders
                         </button>
                         <button
                             className={`nav-item ${activeTab === 'wishlist' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('wishlist')}
+                            onClick={() => navigate('/wishlist')}
                         >
-                            Wishlist ({wishlist.length})
+                            <FiHeart /> Wishlist
+                        </button>
+                        <button
+                            className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('settings')}
+                        >
+                            <FiSettings /> Settings
+                        </button>
+                        <button className="nav-item logout-btn" onClick={handleLogout}>
+                            <FiLogOut /> Logout
                         </button>
                     </nav>
-                </div>
+                </aside>
 
-                {/* Content */}
-                <div className="profile-content">
-                    {/* Personal Information Tab */}
-                    {activeTab === 'profile' && (
-                        <div className="content-card">
-                            <h2>Personal Information</h2>
-                            <form onSubmit={handleProfileUpdate} className="profile-form">
-                                <div className="form-group">
-                                    <label className="form-label">Full Name</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={profileData.name}
-                                        onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                                        required
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Email</label>
-                                    <input
-                                        type="email"
-                                        className="form-control"
-                                        value={profileData.email}
-                                        disabled
-                                    />
-                                    <small className="form-hint">Email cannot be changed</small>
-                                </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Phone Number</label>
-                                    <input
-                                        type="tel"
-                                        className="form-control"
-                                        value={profileData.phone}
-                                        onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                                        placeholder="Enter your phone number"
-                                    />
-                                </div>
-
-                                <button type="submit" className="btn btn-primary" disabled={loading}>
-                                    {loading ? 'Updating...' : 'Update Profile'}
-                                </button>
-                            </form>
-                        </div>
-                    )}
-
-                    {/* Addresses Tab */}
-                    {activeTab === 'addresses' && (
-                        <div className="content-card">
-                            <div className="card-header-flex">
-                                <h2>Saved Addresses</h2>
-                                <button
-                                    className="btn btn-primary btn-sm"
-                                    onClick={() => {
-                                        setShowAddressForm(true);
-                                        setEditingAddress(null);
-                                        resetAddressForm();
-                                    }}
-                                >
-                                    + Add New Address
-                                </button>
-                            </div>
-
-                            {showAddressForm && (
-                                <form onSubmit={handleAddressSubmit} className="address-form">
-                                    <h3>{editingAddress ? 'Edit Address' : 'Add New Address'}</h3>
-
-                                    <div className="form-row">
-                                        <div className="form-group">
-                                            <label className="form-label">Full Name</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={addressForm.fullName}
-                                                onChange={(e) => setAddressForm({ ...addressForm, fullName: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Phone</label>
-                                            <input
-                                                type="tel"
-                                                className="form-control"
-                                                value={addressForm.phone}
-                                                onChange={(e) => setAddressForm({ ...addressForm, phone: e.target.value })}
-                                                maxLength="10"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label className="form-label">Address</label>
-                                        <textarea
-                                            className="form-control"
-                                            value={addressForm.address}
-                                            onChange={(e) => setAddressForm({ ...addressForm, address: e.target.value })}
-                                            rows="3"
-                                            required
-                                        />
-                                    </div>
-
-                                    <div className="form-row">
-                                        <div className="form-group">
-                                            <label className="form-label">City</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={addressForm.city}
-                                                onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">State</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={addressForm.state}
-                                                onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Pincode</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={addressForm.pincode}
-                                                onChange={(e) => setAddressForm({ ...addressForm, pincode: e.target.value })}
-                                                maxLength="6"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label className="checkbox-label">
-                                            <input
-                                                type="checkbox"
-                                                checked={addressForm.isDefault}
-                                                onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })}
-                                            />
-                                            Set as default address
-                                        </label>
-                                    </div>
-
-                                    <div className="form-actions">
-                                        <button type="submit" className="btn btn-primary" disabled={loading}>
-                                            {loading ? 'Saving...' : 'Save Address'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="btn btn-secondary"
-                                            onClick={() => {
-                                                setShowAddressForm(false);
-                                                setEditingAddress(null);
-                                                resetAddressForm();
-                                            }}
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
-                                </form>
-                            )}
-
-                            <div className="addresses-list">
-                                {addresses.length === 0 ? (
-                                    <div className="empty-state">
-                                        <p> No saved addresses yet</p>
-                                    </div>
+                {/* Main Content */}
+                <main className="profile-main">
+                    {/* Profile Header */}
+                    <div className="profile-header">
+                        <div className="profile-info">
+                            <div className="profile-avatar-large">
+                                {user?.avatar && user.avatar !== 'https://via.placeholder.com/150' ? (
+                                    <img src={user.avatar} alt={user?.name} />
                                 ) : (
-                                    addresses.map((addr) => (
-                                        <div key={addr._id} className="address-card">
-                                            {addr.isDefault && <span className="default-badge">Default</span>}
-                                            <h4>{addr.fullName}</h4>
-                                            <p>{addr.address}</p>
-                                            <p>{addr.city}, {addr.state} - {addr.pincode}</p>
-                                            <p className="address-phone">📞 {addr.phone}</p>
-                                            <div className="address-actions">
-                                                <button
-                                                    className="btn btn-sm btn-secondary"
-                                                    onClick={() => handleEditAddress(addr)}
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    className="btn btn-sm btn-outline"
-                                                    onClick={() => handleDeleteAddress(addr._id)}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))
+                                    <FiUser />
                                 )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Wishlist Tab */}
-                    {activeTab === 'wishlist' && (
-                        <div className="content-card">
-                            <h2>My Wishlist</h2>
-                            {wishlist.length === 0 ? (
-                                <div className="empty-state">
-                                    <p> Your wishlist is empty</p>
-                                    <button className="btn btn-primary" onClick={() => navigate('/products')}>
-                                        Browse Products
-                                    </button>
+                            <div className="profile-details">
+                                <h1>{user?.name}</h1>
+                                <div className="profile-meta">
+                                    <span>✉ {user?.email}</span>
+                                    {user?.phone && <span>📱 {user.phone}</span>}
                                 </div>
-                            ) : (
-                                <div className="wishlist-grid">
-                                    {wishlist.map((product) => (
-                                        <div key={product._id} className="wishlist-item">
-                                            <img
-                                                src={product.images?.[0] || '/placeholder.jpg'}
-                                                alt={product.name}
-                                                onClick={() => navigate(`/products/${product._id}`)}
-                                            />
-                                            <div className="wishlist-item-info">
-                                                <h4 onClick={() => navigate(`/products/${product._id}`)}>
-                                                    {product.name}
-                                                </h4>
-                                                <p className="wishlist-price">₹{product.price?.toFixed(2)}</p>
-                                                <div className="wishlist-actions">
-                                                    <button
-                                                        className="btn btn-primary btn-sm"
-                                                        onClick={() => navigate(`/products/${product._id}`)}
-                                                    >
-                                                        View Product
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-outline btn-sm"
-                                                        onClick={() => handleRemoveFromWishlist(product._id)}
-                                                    >
-                                                        Remove
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
+                            </div>
+                        </div>
+                        <button className="edit-profile-btn" onClick={() => setEditModal('profile')}>
+                            <FiEdit2 /> Edit Profile
+                        </button>
+                    </div>
+
+                    {/* Content based on active tab */}
+                    {activeTab === 'overview' && renderOverview()}
+                    {activeTab === 'orders' && renderOrders()}
+                    {activeTab === 'settings' && renderSettings()}
+                </main>
+            </div>
+
+            {/* Edit Modals */}
+            {editModal && (
+                <div className="modal-overlay" onClick={() => setEditModal(null)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>
+                                {editModal === 'name' && 'Edit Name'}
+                                {editModal === 'phone' && 'Edit Phone Number'}
+                                {editModal === 'password' && 'Change Password'}
+                                {editModal === 'profile' && 'Edit Profile'}
+                            </h3>
+                            <button className="modal-close" onClick={() => setEditModal(null)}>
+                                <FiX />
+                            </button>
+                        </div>
+
+                        <div className="modal-body">
+                            {(editModal === 'name' || editModal === 'profile') && (
+                                <div className="form-group">
+                                    <label>Full Name</label>
+                                    <input
+                                        type="text"
+                                        name="name"
+                                        value={formData.name}
+                                        onChange={handleInputChange}
+                                        className="form-control"
+                                        placeholder="Enter your name"
+                                    />
                                 </div>
                             )}
+
+                            {(editModal === 'phone' || editModal === 'profile') && (
+                                <div className="form-group">
+                                    <label>Phone Number</label>
+                                    <input
+                                        type="tel"
+                                        name="phone"
+                                        value={formData.phone}
+                                        onChange={handleInputChange}
+                                        className="form-control"
+                                        placeholder="Enter your phone number"
+                                        maxLength="10"
+                                    />
+                                </div>
+                            )}
+
+                            {editModal === 'password' && (
+                                <>
+                                    <div className="form-group">
+                                        <label>Current Password</label>
+                                        <input
+                                            type="password"
+                                            name="currentPassword"
+                                            value={formData.currentPassword}
+                                            onChange={handleInputChange}
+                                            className="form-control"
+                                            placeholder="Enter current password"
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>New Password</label>
+                                        <input
+                                            type="password"
+                                            name="newPassword"
+                                            value={formData.newPassword}
+                                            onChange={handleInputChange}
+                                            className="form-control"
+                                            placeholder="Enter new password"
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Confirm New Password</label>
+                                        <input
+                                            type="password"
+                                            name="confirmPassword"
+                                            value={formData.confirmPassword}
+                                            onChange={handleInputChange}
+                                            className="form-control"
+                                            placeholder="Confirm new password"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    )}
+
+                        <div className="modal-footer">
+                            <button className="btn-cancel" onClick={() => setEditModal(null)}>
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-save"
+                                onClick={editModal === 'password' ? handleUpdatePassword : handleUpdateProfile}
+                                disabled={loading}
+                            >
+                                {loading ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

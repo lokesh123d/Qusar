@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
 
             const { latitude, longitude } = position.coords;
 
-            // Try to get address from OpenStreetMap (with error handling)
+            // Try to get address from OpenStreetMap (silently fail on error)
             try {
                 const response = await fetch(
                     `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }) => {
                 );
 
                 if (!response.ok) {
-                    throw new Error('Geocoding failed');
+                    return; // Silently fail
                 }
 
                 const data = await response.json();
@@ -79,13 +79,13 @@ export const AuthProvider = ({ children }) => {
                 try {
                     await api.post('/users/address', locationData);
                 } catch (err) {
-                    // Silently ignore if endpoint doesn't exist
+                    // Silently ignore - address endpoint might not exist
                 }
-            } catch (geoError) {
-                // Silently ignore geocoding errors
+            } catch (err) {
+                // Silently ignore geocoding errors (CORS, timeout, etc.)
             }
-        } catch (error) {
-            // Silently ignore all location detection errors
+        } catch (err) {
+            // Silently ignore geolocation errors
             // This is optional functionality, no need to show errors
         }
     };
