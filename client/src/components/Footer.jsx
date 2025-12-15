@@ -60,7 +60,7 @@ const Footer = () => {
 
             <div className="footer-bottom">
                 <div className="container">
-                    <p>&copy; {new Date().getFullYear()} Qusar. All rights reserved.</p>
+                    <p>&copy; {new Date().getFullYear()} Qusar. All rights reserved. | Created by <strong>Lokesh</strong></p>
                     <div className="footer-bottom-links">
                         <a href="#">Privacy Policy</a>
                         <a href="#">Terms of Service</a>
