@@ -1,4 +1,10 @@
-# React + Vite
+# Qusar E-commerce - Frontend
+
+Full-stack e-commerce platform built with React + Vite.
+
+## Deployment
+- Frontend: Vercel (https://qusar.vercel.app)
+- Backend: Render (https://qusar.onrender.com)
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
