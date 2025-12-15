@@ -104,5 +104,5 @@ If you haven't set up MongoDB Atlas yet or lost your connection string:
 
 **Example:**
 ```
-mongodb+srv://qusar_admin:MySecurePassword123@cluster0.abc123.mongodb.net/ecommerce?retryWrites=true&w=majority
+mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@cluster0.xxxxx.mongodb.net/ecommerce?retryWrites=true&w=majority
 ```
