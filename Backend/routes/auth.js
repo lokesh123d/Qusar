@@ -4,7 +4,14 @@ const User = require('../models/User');
 const { generateToken } = require('../middleware/auth');
 const { OAuth2Client } = require('google-auth-library');
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// Initialize Google OAuth client only if credentials are provided
+let client;
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    console.log('✅ Google OAuth initialized');
+} else {
+    console.log('⚠️  Google OAuth not configured - skipping');
+}
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
@@ -125,6 +132,14 @@ router.post('/login', async (req, res) => {
 // @access  Public
 router.post('/google', async (req, res) => {
     try {
+        // Check if Google OAuth is configured
+        if (!client) {
+            return res.status(503).json({
+                success: false,
+                message: 'Google authentication is not configured on this server'
+            });
+        }
+
         const { token } = req.body;
 
         // Verify Google token
