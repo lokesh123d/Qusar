@@ -27,10 +27,13 @@ const AdminDashboard = () => {
     const fetchSellerRequests = async () => {
         try {
             setLoading(true);
-            const { data } = await api.get('/admin/seller-requests');
-            setSellerRequests(data.sellers || []);
+            // Use the new endpoint that works with SellerRequest model
+            const { data } = await api.get('/admin/seller-requests-new');
+            console.log('Seller requests:', data.requests);
+            setSellerRequests(data.requests || []);
         } catch (error) {
             console.error('Error fetching seller requests:', error);
+            setSellerRequests([]);
         } finally {
             setLoading(false);
         }
@@ -41,32 +44,36 @@ const AdminDashboard = () => {
         setTimeout(() => setToast({ show: false, message: '', type: '' }), 3000);
     };
 
-    const handleApproveSeller = async (sellerId) => {
+    const handleApproveSeller = async (requestId) => {
         try {
-            await api.put(`/admin/approve-seller/${sellerId}`);
+            // Use the new endpoint for SellerRequest model
+            await api.post(`/admin/seller-requests/${requestId}/approve`);
             showToast('Seller approved successfully!', 'success');
             // Remove from list immediately
-            setSellerRequests(sellerRequests.filter(s => s._id !== sellerId));
+            setSellerRequests(sellerRequests.filter(r => r._id !== requestId));
         } catch (error) {
-            showToast('Failed to approve seller', 'error');
+            console.error('Approve error:', error);
+            showToast(error.response?.data?.message || 'Failed to approve seller', 'error');
         }
     };
 
-    const handleRejectSeller = async (sellerId) => {
+    const handleRejectSeller = async (requestId) => {
         if (!rejectionReason.trim()) {
             showToast('Please enter rejection reason', 'error');
             return;
         }
 
         try {
-            await api.put(`/admin/reject-seller/${sellerId}`, { reason: rejectionReason });
+            // Use the new endpoint for SellerRequest model
+            await api.post(`/admin/seller-requests/${requestId}/reject`, { reason: rejectionReason });
             showToast('Seller request rejected', 'success');
             // Remove from list immediately
-            setSellerRequests(sellerRequests.filter(s => s._id !== sellerId));
+            setSellerRequests(sellerRequests.filter(r => r._id !== requestId));
             setShowRejectForm(null);
             setRejectionReason('');
         } catch (error) {
-            showToast('Failed to reject seller', 'error');
+            console.error('Reject error:', error);
+            showToast(error.response?.data?.message || 'Failed to reject seller', 'error');
         }
     };
 
@@ -101,55 +108,55 @@ const AdminDashboard = () => {
                     </div>
                 ) : (
                     <div className="requests-grid">
-                        {sellerRequests.map((seller) => (
-                            <div key={seller._id} className="seller-request-card">
+                        {sellerRequests.map((request) => (
+                            <div key={request._id} className="seller-request-card">
                                 <div className="card-header">
                                     <div className="seller-info">
                                         <img
-                                            src={seller.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=6366f1&color=fff`}
-                                            alt={seller.name}
+                                            src={request.user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(request.user?.name || 'User')}&background=6366f1&color=fff`}
+                                            alt={request.user?.name}
                                             className="seller-avatar"
                                         />
                                         <div>
-                                            <h3>{seller.name}</h3>
-                                            <p className="seller-email">{seller.email}</p>
+                                            <h3>{request.user?.name}</h3>
+                                            <p className="seller-email">{request.user?.email}</p>
                                         </div>
                                     </div>
                                     <span className="request-date">
-                                        {new Date(seller.sellerInfo?.requestedAt).toLocaleDateString()}
+                                        {new Date(request.createdAt).toLocaleDateString()}
                                     </span>
                                 </div>
 
                                 <div className="card-body">
                                     <div className="info-row">
                                         <span className="label">Business Name:</span>
-                                        <span className="value">{seller.sellerInfo?.businessName}</span>
+                                        <span className="value">{request.businessName}</span>
                                     </div>
                                     <div className="info-row">
                                         <span className="label">Business Address:</span>
-                                        <span className="value">{seller.sellerInfo?.businessAddress}</span>
+                                        <span className="value">{request.businessAddress}</span>
                                     </div>
-                                    {seller.sellerInfo?.gstNumber && (
+                                    {request.gstNumber && (
                                         <div className="info-row">
                                             <span className="label">GST Number:</span>
-                                            <span className="value">{seller.sellerInfo.gstNumber}</span>
+                                            <span className="value">{request.gstNumber}</span>
                                         </div>
                                     )}
                                     <div className="info-row">
                                         <span className="label">Account Holder:</span>
-                                        <span className="value">{seller.sellerInfo?.bankDetails?.accountHolderName}</span>
+                                        <span className="value">{request.bankDetails?.accountHolderName}</span>
                                     </div>
                                     <div className="info-row">
                                         <span className="label">Account Number:</span>
-                                        <span className="value">****{seller.sellerInfo?.bankDetails?.accountNumber?.slice(-4)}</span>
+                                        <span className="value">****{request.bankDetails?.accountNumber?.slice(-4)}</span>
                                     </div>
                                     <div className="info-row">
                                         <span className="label">IFSC Code:</span>
-                                        <span className="value">{seller.sellerInfo?.bankDetails?.ifscCode}</span>
+                                        <span className="value">{request.bankDetails?.ifscCode}</span>
                                     </div>
                                 </div>
 
-                                {showRejectForm === seller._id ? (
+                                {showRejectForm === request._id ? (
                                     <div className="reject-form">
                                         <textarea
                                             className="form-control"
@@ -161,7 +168,7 @@ const AdminDashboard = () => {
                                         <div className="reject-actions">
                                             <button
                                                 className="btn btn-primary"
-                                                onClick={() => handleRejectSeller(seller._id)}
+                                                onClick={() => handleRejectSeller(request._id)}
                                             >
                                                 Confirm Reject
                                             </button>
@@ -180,13 +187,13 @@ const AdminDashboard = () => {
                                     <div className="card-actions">
                                         <button
                                             className="btn btn-primary"
-                                            onClick={() => handleApproveSeller(seller._id)}
+                                            onClick={() => handleApproveSeller(request._id)}
                                         >
                                             Approve
                                         </button>
                                         <button
                                             className="btn btn-secondary"
-                                            onClick={() => setShowRejectForm(seller._id)}
+                                            onClick={() => setShowRejectForm(request._id)}
                                         >
                                             Reject
                                         </button>
