@@ -1,0 +1,10 @@
+// Export all pages
+
+export { default as Products } from './Products';
+export { default as ProductDetail } from './ProductDetail';
+export { default as Cart } from './Cart';
+export { default as Checkout } from './Checkout';
+export { default as Orders } from './Orders';
+export { default as OrderDetail } from './OrderDetail';
+export { default as Profile } from './Profile';
+export { default as NotFound } from './NotFound';
