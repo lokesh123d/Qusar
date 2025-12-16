@@ -63,7 +63,10 @@ const ProductCard = ({ product }) => {
                     <div className="product-price">
                         <span className="current-price">₹{product.price.toLocaleString()}</span>
                         {hasDiscount && (
-                            <span className="original-price">₹{product.originalPrice.toLocaleString()}</span>
+                            <>
+                                <span className="original-price">₹{product.originalPrice.toLocaleString()}</span>
+                                <div className="discount-text">Save ₹{(product.originalPrice - product.price).toLocaleString()}</div>
+                            </>
                         )}
                     </div>
 
